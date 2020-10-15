@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# edited by uma
+
 import collections
 import hashlib
 import logging
@@ -154,7 +156,8 @@ class ImageDownloader(object):
             for future in self.tqdm(futures.as_completed(future_to_url), total=total, miniters=1):
                 i, url = future_to_url[future]
                 if future.exception() is None:
-                    paths[i] = str(future.result())
+                    #print('qwe')
+                    paths[i] = (url, str(future.result()))
                 else:
                     n_fail += 1
 
@@ -162,7 +165,7 @@ class ImageDownloader(object):
 
         return paths
 
-    def _download_image(self, url, force=False, session=None, timeout=None):
+    def _download_image(self, url, force=False, session=None, timeout=None, min_size=10000):
         """Download image and convert to jpeg rgb mode.
 
         If the image path already exists, it considers that the file has
@@ -193,7 +196,7 @@ class ImageDownloader(object):
             'success': False,
             'url': url,
         }
-        path = Path(self.store_path, hashlib.sha1(to_bytes(url)).hexdigest() + '.jpg')
+        path = Path(self.store_path, hashlib.sha1(to_bytes(url)).hexdigest())
         if path.exists() and not force:
             metadata.update({
                 'success': True,
@@ -210,15 +213,23 @@ class ImageDownloader(object):
                 'proxy': session.proxies.get('http'),
                 'timeout': timeout,
             }
+            
             response = session.get(url, timeout=timeout)
             metadata['response'] = {
                 'headers': dict(response.headers),
                 'status_code': response.status_code,
             }
-            orig_img = Image.open(BytesIO(response.content))
-            img, buf = self.convert_image(orig_img)
+
+            if response.status_code != 200:
+                raise Exception("Status code "+str(response.status_code))
+                
+            if len(response.content) < min_size:
+                raise Exception("Length too small")
+
+            # orig_img = Image.open(BytesIO(response.content))
+            # img, buf = self.convert_image(orig_img)
             with path.open('wb') as f:
-                f.write(buf.getvalue())
+                f.write(response.content)
             metadata.update({
                 'success': True,
                 'filepath': path,
